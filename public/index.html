@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>文件上传</title>
+</head>
+<body>
+	<input type="file" id="file-upload" name="">
+	<button class="upload-btn" onclick="upload(0)">上传</button>
+</body>
+<!-- 使用 axios 文件上传 -->
+<script src="https://cdn.bootcdn.net/ajax/libs/axios/0.19.2/axios.min.js"></script>
+<script>
+ const uploadBtn = document.querySelector('.upload-btn')
+ const uploadFile = document.querySelector('#file-upload')
+ // 设置 分片 大小 1M
+ const chunkSize = 1024*1024
+ /**
+  * [文件分片上传]
+  * @param {Number} [index] [分片标号]
+  * @return {[type]} [description]
+  */
+ function upload(index) {
+ 	// 获取文件上传表单
+ 	try {
+ 		const file = uploadFile.files[0]
+
+ 		// 解构 获取 原文件名以及 后缀
+ 		let [fName, suffix] = file.name.split('.')
+ 		// 文件分片
+ 		let single = index * chunkSize
+ 		// 如果 字节超过 则停止上传
+ 		if(single > file.size) {
+ 			merge(file.name)
+ 			return false
+ 		}
+ 		let block = file.slice(single, single + chunkSize)
+ 		// 设置分片的 文件名 文件名 . 索引 . 后缀
+ 		let blockName = `${fName}.${index}.${suffix}`
+ 		let blockFile = new File([block], blockName)
+
+	 	let formData = new FormData()
+	 	formData.append('file', blockFile)
+	 	// 发送请求
+	 	axios.post('/upload', formData).then((res) => {
+	 		if(res.status === 200) {
+	 			console.log(res)
+	 			// 递归调用 上传
+	 			upload(++index)
+	 		}
+	 		
+	 	})
+ 	} catch (e) {
+ 		console.log(e)
+ 	}
+ }
+ /**
+  * [merge 合并分片文件]
+  * @param  {[String]} name [上传文件名]
+  * @return {[String]}      [文件上传 后 url]
+  */
+ function merge(name) {
+ 	try {
+ 		axios.post('/merge', {name: name}).then(res => {
+ 			if(res === 200) {
+ 				return res.url
+ 			} else {
+ 				console.error('文件上传失败')
+ 			}
+ 		})
+ 	} catch(e) {
+ 		console.log(e)
+ 	}
+ }
+</script>
+</html>
