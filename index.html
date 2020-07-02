@@ -1,0 +1,141 @@
+﻿<!DOCTYPE html>
+
+<html lang="zh" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title>管理界面</title>
+    <link rel="stylesheet" type="text/css" href="css/default.css" />
+    <script type="text/javascript" src="js/jquery-3.4.1.min.js"></script>
+    <script type="text/javascript">
+        $(document).ready(function () {
+            // select files to upload
+            $("#upload_file").change(function () {
+                var inputFiles = $("#upload_file")[0].files;
+                var tableBody = $("#file_list tbody");
+                tableBody.empty();
+                for (var i = 0; i < inputFiles.length; i++) {
+                    tableBody.append(
+                        "<tr>" +
+                        "<td align='center'><input type='checkbox' id='selectedFile" + i + "' name='selectedFile' checked='checked' /></td>" +
+                        "<td align='left'><div style='width: 200px;' class='width-limit'>" + inputFiles[i].name + "</div></td>" +
+                        "<td align='center'><div style='width: 100px;' class='width-limit'>" + inputFiles[i].type + "</td>" +
+                        "<td align='center'>" + (inputFiles[i].size / 1024).toFixed(2) + "k</td>" +
+                        "<td align='center'><progress style='width: 200px; height: 14px;' id='uploadProgress" + i + "' name='uploadProgress' value='0' max='100' /></td>" +
+                        "</tr>");
+                }
+            });
+            // upload selected files
+            $("#upload_all").click(function () {
+                var isAsync = true;
+                var chunkSize = 1024 * 1024;
+                var inputFiles = $("#upload_file")[0].files;
+                for (var i = 0; i < inputFiles.length; i++) {
+                    var fileSelect = $("#selectedFile" + i);
+                    //var fileProgress = $("#uploadProgress" + i);
+                    var fileProgress = document.getElementById("uploadProgress" + i)
+                    if (fileSelect.prop('checked')) {
+                        uploadTask(fileProgress, inputFiles[i], chunkSize, isAsync);
+                    }
+                }
+            });
+        });
+        // upload task
+        function uploadTask(fileProgress, inputFile, chunkSize, isAsync) {
+            var fileName = inputFile.name;
+            var fileSize = inputFile.size;
+            var chunkCount = Math.ceil(fileSize / chunkSize);
+            $.ajax({
+                url: "http://127.0.0.1:5000/task",
+                type: "post",
+                async: isAsync,
+                data: JSON.stringify({ file_name: fileName, file_size: fileSize }),
+                dataType: "json",
+                contentType: "application/json; charset=UTF-8",
+                success: function (data) {
+                    uploadFile(fileProgress, inputFile, 0, chunkSize, chunkCount, true);
+                },
+                error: function (error) {
+                    console.log("uploadTask() error");
+                }
+            });
+        }
+        // upload file
+        function uploadFile(fileProgress, inputFile, chunkIndex, chunkSize, chunkCount, isAsync) {
+            if (chunkIndex < chunkCount) {
+                var fileReader = new FileReader();
+                var chunkStart = chunkIndex * chunkSize;
+                var chunkBlob = inputFile.slice(chunkStart, chunkStart + chunkSize);
+                fileReader.readAsArrayBuffer(chunkBlob);
+                fileReader.onload = function (e) {
+                    var chunkArray = new Uint8Array(fileReader.result);
+                    uploadChuck(fileProgress, inputFile, chunkIndex, chunkSize, chunkCount, chunkArray, isAsync)
+                };
+            }
+        }
+        // upload chunk
+        function uploadChuck(fileProgress, inputFile, chunkIndex, chunkSize, chunkCount, chunkArray, isAsync) {
+            var formData = new FormData();
+            var chunkXor = Math.ceil(Math.random() * 255);
+            for (var k = 0; k < chunkArray.length; ++k)
+                chunkArray[k] ^= chunkXor;
+            formData.append("file_name",   inputFile.name);
+            formData.append("file_size",   inputFile.size);
+            formData.append("chunk_index", chunkIndex);
+            formData.append("chunk_size",  chunkSize);
+            formData.append("chunk_count", chunkCount);
+            formData.append("chunk_xor",   chunkXor);
+            formData.append("chunk_blob",  new Blob([chunkArray]));
+            $.ajax({
+                url: "http://127.0.0.1:5000/upload",
+                type: "post",
+                async: isAsync,
+                data: formData,
+                dataType: "json",
+                cache: false,
+                contentType: false,
+                processData: false,
+                success: function (data) {
+                    fileProgress.value = (chunkIndex + 1) * 100 / chunkCount;
+                    uploadFile(fileProgress, inputFile, chunkIndex + 1, chunkSize, chunkCount, isAsync);
+                },
+                error: function (error) {
+                    console.log("uploadChuck(" + chunkIndex + ") error");
+                }
+            });
+        }
+    </script>
+</head>
+<body>
+    <div class="center">
+        <h2>文件上传</h2>
+        <form method="post" id="upload_form" action="" enctype="multipart/form-data">
+            <table align="center" id="file_list" name="file_list" width="750">
+                <thead>
+                    <tr>
+                        <th width="10%">选取</th>
+                        <th width="30%">文件名</th>
+                        <th width="15%">文件类型</th>
+                        <th width="15%">文件大小</th>
+                        <th width="30%">上传进度</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5">
+                            <span>
+                                <input type="file" id="upload_file" multiple="multiple" />
+                                <input type="button" value="选择文件" />
+                            </span>
+                            <span>
+                                <input type="button" id="upload_all" value="全部上传" />
+                            </span>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+            <p id="message"></p>
+        </form>
+    </div>
+</body>
+</html>
